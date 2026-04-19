@@ -114,6 +114,33 @@ EOF
   echo "[INFO] GOST config generated: ${config}"
 }
 
+# 获取 WARP 端点 IP（WireGuard + DoH + connectivity check）
+get_warp_endpoint_ips() {
+  local ips=""
+
+  # 从 WARP debug 获取当前 WireGuard endpoint
+  local wg_endpoint
+  wg_endpoint=$(warp-cli --accept-tos tunnel endpoint 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  [ -n "${wg_endpoint}" ] && ips="${ips} ${wg_endpoint}"
+
+  # 从 warp-cli settings 获取 DoH resolver IP
+  local doh_ips
+  doh_ips=$(warp-cli --accept-tos settings 2>/dev/null | grep -oE '162\.159\.[0-9]+\.[0-9]+')
+  for ip in ${doh_ips}; do
+    ips="${ips} ${ip}"
+  done
+
+  # 解析 connectivity check 域名
+  local conn_ips
+  conn_ips=$(nslookup connectivity.cloudflareclient.com 2>/dev/null | grep -oE '162\.159\.[0-9]+\.[0-9]+')
+  for ip in ${conn_ips}; do
+    ips="${ips} ${ip}"
+  done
+
+  # 去重
+  echo "${ips}" | tr ' ' '\n' | sort -u | grep -v '^$'
+}
+
 # ============================================================
 # 1. 基础服务
 # ============================================================
@@ -226,28 +253,45 @@ echo "[INFO] Starting GOST with config: ${GOST_CONFIG}"
 gost -C "${GOST_CONFIG}" &
 
 # ============================================================
-# 8. 透明代理 iptables（仅 client，可选，⚠️ 谨慎）
+# 8. 透明代理 iptables（client 默认启用）
 # ============================================================
 
-if [ "${WARP_TRANSPARENT:-false}" = "true" ]; then
-  if [ "${ROLE}" != "client" ]; then
-    echo "[WARN] WARP_TRANSPARENT only works with client role, ignoring"
-  else
-    REDIRECT_PORT="${GOST_REDIRECT_PORT:-12345}"
-    echo "[INFO] Setting up transparent proxy (redirect → :${REDIRECT_PORT})..."
-    echo "[WARN] ⚠️  This hijacks ALL TCP! If GOST chain fails, all TCP breaks."
-    iptables -t nat -N GOST_TRANSPARENT 2>/dev/null || true
-    iptables -t nat -F GOST_TRANSPARENT
-    iptables -t nat -A GOST_TRANSPARENT -d 127.0.0.0/8 -j RETURN
-    iptables -t nat -A GOST_TRANSPARENT -d 10.0.0.0/8 -j RETURN
-    iptables -t nat -A GOST_TRANSPARENT -d 172.16.0.0/12 -j RETURN
-    iptables -t nat -A GOST_TRANSPARENT -d 192.168.0.0/16 -j RETURN
-    iptables -t nat -A GOST_TRANSPARENT -d 100.64.0.0/10 -j RETURN
-    iptables -t nat -A GOST_TRANSPARENT -p tcp -j REDIRECT --to-ports "${REDIRECT_PORT}"
-    iptables -t nat -C OUTPUT -p tcp -j GOST_TRANSPARENT 2>/dev/null || \
-      iptables -t nat -A OUTPUT -p tcp -j GOST_TRANSPARENT
-    echo "[INFO] iptables transparent proxy rules applied"
-  fi
+# client 角色默认启用透明代理，其他角色不启用
+if [ "${ROLE}" = "client" ] || [ "${WARP_TRANSPARENT:-false}" = "true" ]; then
+  REDIRECT_PORT="${GOST_REDIRECT_PORT:-12345}"
+  echo "[INFO] Setting up transparent proxy (redirect → :${REDIRECT_PORT})..."
+
+  iptables -t nat -N GOST_TRANSPARENT 2>/dev/null || true
+  iptables -t nat -F GOST_TRANSPARENT
+
+  # 排除本地回环
+  iptables -t nat -A GOST_TRANSPARENT -d 127.0.0.0/8 -j RETURN
+
+  # 排除内网地址
+  iptables -t nat -A GOST_TRANSPARENT -d 10.0.0.0/8 -j RETURN
+  iptables -t nat -A GOST_TRANSPARENT -d 172.16.0.0/12 -j RETURN
+  iptables -t nat -A GOST_TRANSPARENT -d 192.168.0.0/16 -j RETURN
+
+  # 排除 WARP mesh 内网（100.96.0.0/16 走 WARP tunnel，不经 GOST）
+  iptables -t nat -A GOST_TRANSPARENT -d 100.64.0.0/10 -j RETURN
+
+  # 排除 Cloudflare WARP 端点 IP（防止 WARP 断连）
+  # 1. 动态获取当前 WARP 端点 IP
+  WARP_ENDPOINT_IPS=$(get_warp_endpoint_ips)
+  for ip in ${WARP_ENDPOINT_IPS}; do
+    echo "[INFO] Excluding WARP endpoint: ${ip}"
+    iptables -t nat -A GOST_TRANSPARENT -d "${ip}" -j RETURN
+  done
+
+  # 2. 兜底：排除 Cloudflare 162.159.0.0/16（覆盖 DoH、API、connectivity check）
+  iptables -t nat -A GOST_TRANSPARENT -d 162.159.0.0/16 -j RETURN
+
+  # 劫持所有其他 TCP 流量
+  iptables -t nat -A GOST_TRANSPARENT -p tcp -j REDIRECT --to-ports "${REDIRECT_PORT}"
+  iptables -t nat -C OUTPUT -p tcp -j GOST_TRANSPARENT 2>/dev/null || \
+    iptables -t nat -A OUTPUT -p tcp -j GOST_TRANSPARENT
+
+  echo "[INFO] iptables transparent proxy rules applied"
 fi
 
 echo "[INFO] warp-mesh started (${ROLE} mode)"
