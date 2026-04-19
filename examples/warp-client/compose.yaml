@@ -24,9 +24,14 @@ services:
       - CONNECTOR_TOKEN=eyJ...
 
       # --- GOST 转发目标（必需） ---
-      # 直连落地节点：socks5://100.96.0.12:1080
-      # 或经过中转：socks5://100.96.0.16:1080
-      - GOST_REMOTE=socks5://100.96.0.12:1080
+      # 直连落地节点：socks5://us-vps:1080
+      # 或经过中转：socks5://relay-1:1080
+      - GOST_REMOTE=socks5://us-vps:1080
+
+      # --- Mesh 主机名映射（配合 GOST_REMOTE 使用名称） ---
+      # 格式："name:ip name2:ip2"
+      # 避免 IP 变化后需要改配置
+      - MESH_HOSTS=us-vps:100.96.0.12 relay-1:100.96.0.16
 
       # --- 透明代理（client 默认启用） ---
       # iptables 劫持所有 TCP → GOST redirect port

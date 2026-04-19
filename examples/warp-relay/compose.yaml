@@ -23,7 +23,11 @@ services:
       # --- GOST 转发目标（必需） ---
       # 格式：[protocol://]host:port
       # protocol 默认 socks5，也可用 http://
-      - GOST_REMOTE=socks5://100.96.0.12:1080
+      # 支持主机名（配合 MESH_HOSTS）
+      - GOST_REMOTE=socks5://us-vps:1080
+
+      # --- Mesh 主机名映射 ---
+      - MESH_HOSTS=us-vps:100.96.0.12
 
       # --- GOST 认证（保护中转节点） ---
       # - GOST_USER=admin

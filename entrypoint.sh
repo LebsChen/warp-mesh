@@ -263,6 +263,27 @@ echo "[INFO] Adding mesh route (100.96.0.0/16 → CloudflareWARP)..."
 ip route add 100.96.0.0/16 dev CloudflareWARP 2>/dev/null || true
 
 # ============================================================
+# 6b. Mesh 主机名映射（/etc/hosts）
+# ============================================================
+
+# MESH_HOSTS 格式："name1:ip1 name2:ip2 ..."
+# 示例：MESH_HOSTS="us-vps:100.96.0.12 relay-1:100.96.0.16"
+# 这样 GOST_REMOTE 可以用 socks5://us-vps:1080 而不是硬编码 IP
+if [ -n "${MESH_HOSTS}" ]; then
+  echo "[INFO] Adding mesh host mappings..."
+  for entry in ${MESH_HOSTS}; do
+    name="${entry%%:*}"
+    ip="${entry#*:}"
+    if [ -n "${name}" ] && [ -n "${ip}" ]; then
+      # 移除旧条目（避免重复）
+      sed -i "/# warp-mesh:${name}$/d" /etc/hosts
+      echo "${ip} ${name} # warp-mesh:${name}" >> /etc/hosts
+      echo "[INFO]   ${name} → ${ip}"
+    fi
+  done
+fi
+
+# ============================================================
 # 7. GOST 代理（配置文件）
 # ============================================================
 
