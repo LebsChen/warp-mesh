@@ -1,65 +1,32 @@
 # warp-mesh
 
-Cloudflare WARP mesh 网络 + GOST 代理链，统一镜像，三种角色。
+Cloudflare WARP Mesh 网络 + GOST 代理链。统一镜像，三种角色，一个 `entrypoint.sh` 搞定。
 
 ## 角色
 
-| 角色 | 说明 | GOST 监听 | GOST 转发 |
-|---|---|---|---|
-| **node** (落地) | 有公网出口，接受 mesh 连入 | ✅ 0.0.0.0:1080/8080 | 可选 → 下一跳 |
-| **relay** (中转) | 接受连入并转发到下一跳 | ✅ 0.0.0.0:1080/8080 | ✅ → 下一跳 |
-| **client** (本地) | 本地代理客户端 | ✅ 127.0.0.1:1080/8080 | ✅ → 下一跳 |
+| 角色 | 说明 | GOST 监听 | 转发 | 透明代理 |
+|---|---|---|---|---|
+| **node** (落地) | 公网出口，接受 mesh 连入 | `0.0.0.0:1080/8080` | 可选 | ❌ |
+| **relay** (中转) | 接受连入，转发到下一跳 | `0.0.0.0:1080/8080` | ✅ | ❌ |
+| **client** (本地) | 本地/局域网代理客户端 | `0.0.0.0:1080/8080` | ✅ | ✅ 默认启用 |
 
 ## 典型拓扑
 
 ```
-client (本地) ──mesh──→ relay (中转) ──mesh──→ node (落地) → 外网
-                       ↘ node2 ──mesh──→ node2 (落地) → 外网2
+client (本地/局域网)          relay (国内中转)          node (US VPS 落地)
+0.0.0.0:1080/8080            0.0.0.0:1080/8080         0.0.0.0:1080/8080
+透明代理 ✅                   GOST_REMOTE →             出口 → 外网
+GOST_REMOTE →                100.96.0.12:1080
+100.96.0.16:1080
 ```
 
-```
-VM102 (client)  ──mesh──→  VM101 (relay)  ──mesh──→  US VPS (node)
-127.0.0.1:1080            0.0.0.0:1080             0.0.0.0:1080
-         GOST_REMOTE→              GOST_REMOTE→
-         100.96.0.16:1080          100.96.0.12:1080
-```
+## 特性
 
-## 环境变量
-
-### 必需
-
-| 变量 | 说明 |
-|---|---|
-| `CONNECTOR_TOKEN` | Cloudflare Zero Trust Connector Token |
-
-### 角色
-
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `WARP_ROLE` | `node` | `node` / `relay` / `client` |
-
-### GOST 代理
-
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `GOST_REMOTE` | — | 转发目标，如 `socks5://100.96.0.12:1080` 或 `100.96.0.12:1080` |
-| `GOST_BIND` | `0.0.0.0` | node/relay 监听地址 |
-| `GOST_SOCKS_PORT` | `1080` | SOCKS5 端口 |
-| `GOST_HTTP_PORT` | `8080` | HTTP 代理端口 |
-| `GOST_USER` | — | 认证用户名 |
-| `GOST_PASS` | — | 认证密码 |
-| `GOST_LOCAL_BIND` | `127.0.0.1` | client 监听地址 |
-| `GOST_LOCAL_PORT` | `1080` | client SOCKS5 端口 |
-| `GOST_LOCAL_HTTP_PORT` | `8080` | client HTTP 端口 |
-
-### 透明代理（仅 client，⚠️ 谨慎启用）
-
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `WARP_TRANSPARENT` | `false` | 启用 iptables 透明代理 |
-| `GOST_REDIRECT_PORT` | `12345` | 透明代理 redirect 端口 |
-
-> ⚠️ **警告**：透明代理会劫持所有 TCP 出口流量到 GOST。如果 GOST 链路不通，所有 TCP 连接都会失败！
+- **统一镜像**：三种角色通过 `WARP_ROLE` 环境变量区分
+- **MDM 支持**：挂载 `mdm.xml` 或通过环境变量自动生成
+- **透明代理**：client 默认 iptables 劫持所有 TCP → GOST，自动排除 WARP 端点 IP
+- **优雅退出**：`docker stop` 自动断开 WARP → 停止 GOST → 清理 iptables → 停止 warp-svc
+- **认证**：node/relay 可配置 SOCKS5/HTTP 代理认证
 
 ## 快速开始
 
@@ -73,8 +40,7 @@ docker build -t warp-mesh:latest .
 
 ```bash
 cd examples/warp-node
-export CONNECTOR_TOKEN="your-token"
-# 直接用，不转发
+# 编辑 compose.yaml，填入 CONNECTOR_TOKEN
 docker compose up -d
 ```
 
@@ -82,8 +48,7 @@ docker compose up -d
 
 ```bash
 cd examples/warp-relay
-export CONNECTOR_TOKEN="your-token"
-echo "NEXT_HOP=100.96.0.12:1080" > .env  # node 的 mesh IP
+# 编辑 compose.yaml，填入 CONNECTOR_TOKEN 和 GOST_REMOTE（node 的 mesh IP）
 docker compose up -d
 ```
 
@@ -91,67 +56,152 @@ docker compose up -d
 
 ```bash
 cd examples/warp-client
-export CONNECTOR_TOKEN="your-token"
-echo "NEXT_HOP=100.96.0.16:1080" > .env  # relay 的 mesh IP
+# 编辑 compose.yaml，填入 CONNECTOR_TOKEN 和 GOST_REMOTE
 docker compose up -d
-```
 
-### 5. 测试
-
-```bash
-curl -4 -s --proxy socks5://127.0.0.1:1080 ifconfig.me
+# 测试
+curl -4 -s --proxy socks5://<client-ip>:1080 ifconfig.me
 # 应返回 node 的出口 IP
 ```
 
-## 工作原理
+### 5. 停止
 
-entrypoint.sh 根据角色和 `GOST_REMOTE` 环境变量动态生成 GOST v3 配置文件 (`/etc/gost/gost.yaml`)，然后启动 GOST。
-
-**GOST 配置文件格式**（自动生成）：
-
-```yaml
-services:
-  - name: socks5-service
-    addr: ":1080"
-    handler:
-      type: socks5
-      chain: gost-chain
-    listener:
-      type: tcp
-
-chains:
-  - name: gost-chain
-    hops:
-      - name: hop-remote
-        nodes:
-          - name: remote-node
-            addr: 100.96.0.12:1080
-            connector:
-              type: socks5
-            dialer:
-              type: tcp
+```bash
+docker compose down
+# 自动：断开 WARP → 停止 GOST → 清理 iptables → 停止 warp-svc
 ```
 
-> ⚠️ **注意**：GOST v3 的 chain 配置中，hop 下必须用 `nodes` 数组，且用 `connector`/`dialer`（不是 `handler`/`listener`）。直接在 hop 下写 `addr`/`handler` 不会生效。
+## 环境变量
 
-## 已知问题
+### 必需
 
-1. **mesh IP 动态变化** — WARP 重新注册会分配新 IP，`GOST_REMOTE` 需更新
-2. **WARP 连接不稳定** — 部分环境 WARP DNS (DoH) 超时
-3. **旧 GOST 进程残留** — `network_mode: host` 下容器删除后进程可能残留，需 `kill $(pidof gost)`
+| 变量 | 说明 |
+|---|---|
+| `CONNECTOR_TOKEN` | Cloudflare Zero Trust Connector Token（从 Dashboard 获取） |
+| `WARP_ROLE` | 角色：`node` / `relay` / `client` |
+
+### GOST 代理
+
+| 变量 | 默认 | 适用角色 | 说明 |
+|---|---|---|---|
+| `GOST_REMOTE` | — | relay, client | 转发目标，如 `socks5://100.96.0.12:1080` |
+| `GOST_BIND` | `0.0.0.0` | node, relay | 监听地址 |
+| `GOST_SOCKS_PORT` | `1080` | 全部 | SOCKS5 端口 |
+| `GOST_HTTP_PORT` | `8080` | 全部 | HTTP 代理端口 |
+| `GOST_USER` | — | node, relay | 认证用户名 |
+| `GOST_PASS` | — | node, relay | 认证密码 |
+| `GOST_LOCAL_BIND` | `0.0.0.0` | client | client 监听地址 |
+| `GOST_LOCAL_PORT` | `1080` | client | client SOCKS5 端口 |
+| `GOST_LOCAL_HTTP_PORT` | `8080` | client | client HTTP 端口 |
+
+### WARP 连接
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `WARP_AUTO_CONNECT` | `true` | 是否自动连接 |
+| `WARP_SLEEP` | `5` | warp-svc 启动等待秒数 |
+| `WARP_MODE` | — | 运行模式：`warp`/`doh`/`warp+doh`/`dot`/`warp+dot`/`proxy`/`tunnel_only` |
+| `WARP_ENDPOINT` | — | 强制端点 IP:PORT |
+| `WARP_PROTOCOL` | — | 隧道协议：`WireGuard`/`MASQUE` |
+
+### 透明代理（client 默认启用）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `WARP_TRANSPARENT` | `true`(client) | 启用 iptables 透明代理 |
+| `GOST_REDIRECT_PORT` | `12345` | redirect 目标端口 |
+
+**自动排除的流量（不会被劫持）：**
+
+| CIDR | 说明 |
+|---|---|
+| `127.0.0.0/8` | 本地回环 |
+| `10.0.0.0/8` | 内网 |
+| `172.16.0.0/12` | Docker 内网 |
+| `192.168.0.0/16` | 局域网 |
+| `100.64.0.0/10` | WARP mesh 内网 |
+| `162.159.0.0/16` | Cloudflare WARP 端点（兜底） |
+| 动态 WARP IP | 启动时自动获取 |
+
+> ⚠️ **警告**：透明代理会劫持所有 TCP 出口流量到 GOST。如果 GOST 链路不通，所有 TCP 连接都会失败！
+
+### MDM 配置
+
+两种方式（二选一）：
+
+**方式一：挂载 mdm.xml（推荐）**
+
+```yaml
+volumes:
+  - ./mdm.xml:/var/lib/cloudflare-warp/mdm.xml:ro
+```
+
+参考 `examples/mdm.xml` 模板，支持的配置项：`organization`、`auth_client_id/secret`、`service_mode`、`warp_tunnel_protocol`、`auto_connect`、`switch_locked`、`override_warp_endpoint`、`gateway_unique_id`、`enable_post_quantum` 等。
+
+**方式二：环境变量自动生成**
+
+| 变量 | 对应 mdm.xml 键 | 说明 |
+|---|---|---|
+| `WARP_ORG` | `organization` | Zero Trust 组织名 |
+| `WARP_AUTH_CLIENT_ID` | `auth_client_id` | Service Token Client ID |
+| `WARP_AUTH_CLIENT_SECRET` | `auth_client_secret` | Service Token Client Secret |
+| `WARP_SERVICE_MODE` | `service_mode` | 运行模式 |
+| `WARP_TUNNEL_PROTOCOL` | `warp_tunnel_protocol` | 隧道协议 |
+| `WARP_OVERRIDE_ENDPOINT` | `override_warp_endpoint` | 端点覆盖 |
+| `WARP_GATEWAY_ID` | `gateway_unique_id` | DNS Gateway ID |
+| `WARP_ENVIRONMENT` | `environment` | `normal`/`fedramp_high` |
+| `WARP_POST_QUANTUM` | `enable_post_quantum` | 后量子密码学 |
+| `WARP_DISPLAY_NAME` | `display_name` | 设备显示名 |
+
+## 启动流程
+
+```
+entrypoint.sh
+  │
+  ├─ 1. dbus + warp-svc 启动
+  ├─ 2. MDM 配置（挂载文件 或 环境变量生成）
+  ├─ 3. WARP Connector 注册
+  ├─ 4. WARP 可选配置（mode/endpoint/protocol）
+  ├─ 5. WARP 连接
+  ├─ 6. Mesh 路由（100.96.0.0/16 → CloudflareWARP）
+  ├─ 7. GOST 代理（动态生成配置）
+  ├─ 8. iptables 透明代理（client 默认启用）
+  └─ 9. 信号监听（SIGTERM → 优雅退出）
+```
+
+**优雅退出（`docker stop`）：**
+
+```
+SIGTERM 收到
+  ├─ warp-cli disconnect    断开 WARP
+  ├─ kill GOST              停止代理
+  ├─ 清理 iptables          删除 GOST_TRANSPARENT 链
+  └─ pkill warp-svc         停止后台服务
+```
 
 ## 项目结构
 
 ```
 warp-mesh/
-├── Dockerfile
-├── entrypoint.sh               # 统一入口（动态生成 GOST 配置）
+├── Dockerfile                  # 统一镜像（debian + warp + gost）
+├── entrypoint.sh               # 统一入口（三种角色 + 优雅退出）
 ├── docker-compose.yaml         # 默认 node 角色
-└── examples/
-    ├── warp-node/compose.yaml  # 落地节点
-    ├── warp-relay/compose.yaml # 中转节点
-    └── warp-client/compose.yaml # 本地客户端
+├── docs/
+│   └── CONFIGURATION.md        # 完整配置参考
+├── examples/
+│   ├── mdm.xml                 # MDM 配置模板
+│   ├── warp-node/compose.yaml  # 落地节点
+│   ├── warp-relay/compose.yaml # 中转节点
+│   └── warp-client/compose.yaml # 本地客户端（host 网络）
+└── README.md
 ```
+
+## 注意事项
+
+- **Mesh IP**：WARP Connector 的 mesh IP（100.64.x.x）由 Cloudflare 自动分配，正常 reconnect 不变，删除重建会变
+- **client 用 `network_mode: host`**：透明代理和局域网可达都需要 host 网络
+- **GOST 配置格式**：chain 中 hop 下必须用 `nodes` 数组 + `connector`/`dialer`（不是 `handler`/`listener`）
+- **旧进程残留**：`network_mode: host` 下容器异常退出可能残留 GOST 进程，需 `kill $(pidof gost)`
 
 ## License
 
