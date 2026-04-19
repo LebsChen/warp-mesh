@@ -1,0 +1,18 @@
+services:
+  warp-node:
+    image: chenlebs/warp-node:latest
+    container_name: warp-node
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - warp-data:/var/lib/cloudflare-warp
+      - ./gost.yaml:/etc/gost/gost.yaml
+    environment:
+      - CONNECTOR_TOKEN=your-token
+      - WARP_AUTO_CONNECT=true
+      - GOST_CONFIG=/etc/gost/gost.yaml
+volumes:
+  warp-data:
