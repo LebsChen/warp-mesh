@@ -297,6 +297,7 @@ esac
 
 echo "[INFO] Starting GOST with config: ${GOST_CONFIG}"
 gost -C "${GOST_CONFIG}" &
+GOST_PID=$!
 
 # ============================================================
 # 8. 透明代理 iptables（client 默认启用）
@@ -340,5 +341,41 @@ if [ "${ROLE}" = "client" ] || [ "${WARP_TRANSPARENT:-false}" = "true" ]; then
   echo "[INFO] iptables transparent proxy rules applied"
 fi
 
+# ============================================================
+# 9. 信号处理 + 优雅退出
+# ============================================================
+
+cleanup() {
+  echo "[INFO] Caught stop signal, shutting down..."
+
+  # 1. 断开 WARP 连接
+  warp-cli --accept-tos disconnect 2>/dev/null || true
+  echo "[INFO] WARP disconnected"
+
+  # 2. 停止 GOST
+  if [ -n "${GOST_PID}" ] && kill -0 "${GOST_PID}" 2>/dev/null; then
+    kill -TERM "${GOST_PID}" 2>/dev/null
+    wait "${GOST_PID}" 2>/dev/null || true
+    echo "[INFO] GOST stopped"
+  fi
+
+  # 3. 清理 iptables 透明代理规则
+  iptables -t nat -D OUTPUT -p tcp -j GOST_TRANSPARENT 2>/dev/null || true
+  iptables -t nat -F GOST_TRANSPARENT 2>/dev/null || true
+  iptables -t nat -X GOST_TRANSPARENT 2>/dev/null || true
+  echo "[INFO] iptables rules cleaned"
+
+  # 4. 停止 warp-svc
+  pkill -TERM warp-svc 2>/dev/null || true
+  echo "[INFO] warp-svc stopped"
+
+  echo "[INFO] Shutdown complete"
+  exit 0
+}
+
+trap cleanup SIGTERM SIGINT SIGQUIT
+
 echo "[INFO] warp-mesh started (${ROLE} mode)"
-tail -f /dev/null
+
+# 等待信号
+wait
