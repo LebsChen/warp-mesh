@@ -1,6 +1,5 @@
 # warp-mesh node (落地节点)
 # 接受 mesh 连入，出口到外网（或转发到下一跳）
-# 使用场景：US VPS 等有公网 IP 的机器
 services:
   warp-mesh:
     image: warp-mesh:latest
@@ -15,8 +14,10 @@ services:
     environment:
       - CONNECTOR_TOKEN=${CONNECTOR_TOKEN}
       - WARP_ROLE=node
-      # - GOST_REMOTE=socks5://next-hop-mesh-ip:1080  # 可选：转发到下一跳
-      # - GOST_USER=user                               # 可选：认证
+      # 转发到下一跳（可选，如 US VPS 的 mesh IP）
+      # - GOST_REMOTE=socks5://100.96.0.12:1080
+      # 认证（可选）
+      # - GOST_USER=user
       # - GOST_PASS=pass
     cap_add:
       - NET_ADMIN

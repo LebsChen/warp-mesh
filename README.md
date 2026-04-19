@@ -13,14 +13,15 @@ Cloudflare WARP mesh 网络 + GOST 代理链，统一镜像，三种角色。
 ## 典型拓扑
 
 ```
-client → relay → node → 外网
-                ↘ node2 → 外网2
+client (本地) ──mesh──→ relay (中转) ──mesh──→ node (落地) → 外网
+                       ↘ node2 ──mesh──→ node2 (落地) → 外网2
 ```
 
 ```
 VM102 (client)  ──mesh──→  VM101 (relay)  ──mesh──→  US VPS (node)
 127.0.0.1:1080            0.0.0.0:1080             0.0.0.0:1080
-                          转发→US VPS              直连出口
+         GOST_REMOTE→              GOST_REMOTE→
+         100.96.0.16:1080          100.96.0.12:1080
 ```
 
 ## 环境变量
@@ -60,13 +61,6 @@ VM102 (client)  ──mesh──→  VM101 (relay)  ──mesh──→  US VPS 
 
 > ⚠️ **警告**：透明代理会劫持所有 TCP 出口流量到 GOST。如果 GOST 链路不通，所有 TCP 连接都会失败！
 
-### WARP
-
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `WARP_AUTO_CONNECT` | `true` | 自动 connect |
-| `WARP_SLEEP` | `5` | warp-svc 启动等待秒数 |
-
 ## 快速开始
 
 ### 1. 构建
@@ -89,8 +83,7 @@ docker compose up -d
 ```bash
 cd examples/warp-relay
 export CONNECTOR_TOKEN="your-token"
-# .env 文件设置 NEXT_HOP 为 node 的 mesh IP
-echo "NEXT_HOP=100.96.0.12:1080" > .env
+echo "NEXT_HOP=100.96.0.12:1080" > .env  # node 的 mesh IP
 docker compose up -d
 ```
 
@@ -99,32 +92,60 @@ docker compose up -d
 ```bash
 cd examples/warp-client
 export CONNECTOR_TOKEN="your-token"
-# .env 文件设置 NEXT_HOP 为 relay 的 mesh IP
-echo "NEXT_HOP=100.96.0.16:1080" > .env
+echo "NEXT_HOP=100.96.0.16:1080" > .env  # relay 的 mesh IP
 docker compose up -d
 ```
 
 ### 5. 测试
 
 ```bash
-# 在 client 机器上
 curl -4 -s --proxy socks5://127.0.0.1:1080 ifconfig.me
 # 应返回 node 的出口 IP
 ```
 
+## 工作原理
+
+entrypoint.sh 根据角色和 `GOST_REMOTE` 环境变量动态生成 GOST v3 配置文件 (`/etc/gost/gost.yaml`)，然后启动 GOST。
+
+**GOST 配置文件格式**（自动生成）：
+
+```yaml
+services:
+  - name: socks5-service
+    addr: ":1080"
+    handler:
+      type: socks5
+      chain: gost-chain
+    listener:
+      type: tcp
+
+chains:
+  - name: gost-chain
+    hops:
+      - name: hop-remote
+        nodes:
+          - name: remote-node
+            addr: 100.96.0.12:1080
+            connector:
+              type: socks5
+            dialer:
+              type: tcp
+```
+
+> ⚠️ **注意**：GOST v3 的 chain 配置中，hop 下必须用 `nodes` 数组，且用 `connector`/`dialer`（不是 `handler`/`listener`）。直接在 hop 下写 `addr`/`handler` 不会生效。
+
 ## 已知问题
 
-1. **mesh IP 动态变化** — 每次 WARP 重新注册会分配新的 mesh IP，`GOST_REMOTE` 中的 IP 需要更新
-2. **WARP 连接不稳定** — 部分 VM 上 WARP DNS (DoH) 可能超时，导致 WARP 卡在 Connecting
-3. **GOST 配置文件 chain 不生效** — GOST v3.x 配置文件的 chain/forward 功能有 bug，已改用命令行 `-F` 参数
-4. **旧 GOST 进程残留** — `network_mode: host` 下，容器删除后 GOST 进程可能仍在宿主机运行，需手动 `kill`
+1. **mesh IP 动态变化** — WARP 重新注册会分配新 IP，`GOST_REMOTE` 需更新
+2. **WARP 连接不稳定** — 部分环境 WARP DNS (DoH) 超时
+3. **旧 GOST 进程残留** — `network_mode: host` 下容器删除后进程可能残留，需 `kill $(pidof gost)`
 
 ## 项目结构
 
 ```
 warp-mesh/
 ├── Dockerfile
-├── entrypoint.sh
+├── entrypoint.sh               # 统一入口（动态生成 GOST 配置）
 ├── docker-compose.yaml         # 默认 node 角色
 └── examples/
     ├── warp-node/compose.yaml  # 落地节点

@@ -1,6 +1,5 @@
 # warp-mesh relay (中转节点)
 # 接受 mesh 连入 + 转发到下一跳
-# 使用场景：国内中转服务器
 services:
   warp-mesh:
     image: warp-mesh:latest
@@ -15,7 +14,7 @@ services:
     environment:
       - CONNECTOR_TOKEN=${CONNECTOR_TOKEN}
       - WARP_ROLE=relay
-      - GOST_REMOTE=socks5://${NEXT_HOP:-100.96.0.12:1080}  # 转发目标
+      - GOST_REMOTE=socks5://${NEXT_HOP:-100.96.0.12:1080}
     cap_add:
       - NET_ADMIN
 

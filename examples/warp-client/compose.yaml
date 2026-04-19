@@ -1,6 +1,5 @@
 # warp-mesh client (本地客户端)
 # 本地 SOCKS5 + HTTP 代理，转发到 mesh 下一跳
-# 使用场景：本地开发机、内网机器
 services:
   warp-mesh:
     image: warp-mesh:latest
@@ -15,9 +14,10 @@ services:
     environment:
       - CONNECTOR_TOKEN=${CONNECTOR_TOKEN}
       - WARP_ROLE=client
-      - GOST_REMOTE=socks5://${NEXT_HOP:-100.96.0.16:1080}  # relay 或 node 的 mesh IP
-      - GOST_LOCAL_BIND=127.0.0.1                            # 本地监听地址
-      # - WARP_TRANSPARENT=true                               # ⚠️ 可选：透明代理（会劫持所有 TCP）
+      - GOST_REMOTE=socks5://${NEXT_HOP:-100.96.0.16:1080}
+      - GOST_LOCAL_BIND=127.0.0.1
+      # ⚠️ 透明代理（会劫持所有 TCP 流量，谨慎启用）
+      # - WARP_TRANSPARENT=true
     cap_add:
       - NET_ADMIN
 
