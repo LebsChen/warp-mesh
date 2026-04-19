@@ -155,19 +155,65 @@ warp-svc &
 sleep ${WARP_SLEEP:-5}
 
 # ============================================================
-# 2. MDM 配置（可选）
+# 2. MDM 配置
 # ============================================================
 
-if [ -n "${MDM_TOKEN}" ]; then
+MDM_FILE="/var/lib/cloudflare-warp/mdm.xml"
+
+# 如果 mdm.xml 已通过 volume 挂载，直接使用
+if [ -f "${MDM_FILE}" ]; then
+  echo "[INFO] Using mounted mdm.xml from ${MDM_FILE}"
+  warp-cli --accept-tos mdm set-config 2>/dev/null || true
+
+# 否则，从环境变量生成 mdm.xml
+elif [ -n "${WARP_ORG}" ] || [ -n "${WARP_AUTH_CLIENT_ID}" ]; then
+  echo "[INFO] Generating mdm.xml from environment variables..."
   mkdir -p /var/lib/cloudflare-warp
-  cat > /var/lib/cloudflare-warp/mdm.xml << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<config>
-  <organization>${MDM_ORG:-}</organization>
-  <token>${MDM_TOKEN}</token>
-</config>
-EOF
-  echo "[INFO] MDM config written"
+
+  cat > "${MDM_FILE}" << XMEOF
+<dict>
+XMEOF
+
+  # --- 必需：组织名 ---
+  [ -n "${WARP_ORG}" ] && echo "  <key>organization</key><string>${WARP_ORG}</string>" >> "${MDM_FILE}"
+
+  # --- Service Token 认证 ---
+  if [ -n "${WARP_AUTH_CLIENT_ID}" ] && [ -n "${WARP_AUTH_CLIENT_SECRET}" ]; then
+    echo "  <key>auth_client_id</key><string>${WARP_AUTH_CLIENT_ID}</string>" >> "${MDM_FILE}"
+    echo "  <key>auth_client_secret</key><string>${WARP_AUTH_CLIENT_SECRET}</string>" >> "${MDM_FILE}"
+  fi
+
+  # --- 连接行为 ---
+  [ -n "${WARP_AUTO_CONNECT}" ] && echo "  <key>auto_connect</key><integer>${WARP_AUTO_CONNECT}</integer>" >> "${MDM_FILE}"
+  [ "${WARP_SWITCH_LOCKED:-}" = "true" ] && echo "  <key>switch_locked</key><true/>" >> "${MDM_FILE}"
+  [ "${WARP_ONBOARDING:-}" = "false" ] && echo "  <key>onboarding</key><false/>" >> "${MDM_FILE}"
+
+  # --- 运行模式 ---
+  [ -n "${WARP_SERVICE_MODE}" ] && echo "  <key>service_mode</key><string>${WARP_SERVICE_MODE}</string>" >> "${MDM_FILE}"
+  [ -n "${WARP_PROXY_PORT}" ] && echo "  <key>proxy_port</key><integer>${WARP_PROXY_PORT}</integer>" >> "${MDM_FILE}"
+
+  # --- 隧道协议 ---
+  [ -n "${WARP_TUNNEL_PROTOCOL}" ] && echo "  <key>warp_tunnel_protocol</key><string>${WARP_TUNNEL_PROTOCOL}</string>" >> "${MDM_FILE}"
+
+  # --- 端点覆盖 ---
+  [ -n "${WARP_OVERRIDE_ENDPOINT}" ] && echo "  <key>override_warp_endpoint</key><string>${WARP_OVERRIDE_ENDPOINT}</string>" >> "${MDM_FILE}"
+  [ -n "${WARP_OVERRIDE_DOH}" ] && echo "  <key>override_doh_endpoint</key><string>${WARP_OVERRIDE_DOH}</string>" >> "${MDM_FILE}"
+  [ -n "${WARP_OVERRIDE_API}" ] && echo "  <key>override_api_endpoint</key><string>${WARP_OVERRIDE_API}</string>" >> "${MDM_FILE}"
+
+  # --- 高级 ---
+  [ -n "${WARP_GATEWAY_ID}" ] && echo "  <key>gateway_unique_id</key><string>${WARP_GATEWAY_ID}</string>" >> "${MDM_FILE}"
+  [ -n "${WARP_ENVIRONMENT}" ] && echo "  <key>environment</key><string>${WARP_ENVIRONMENT}</string>" >> "${MDM_FILE}"
+  [ "${WARP_POST_QUANTUM:-}" = "true" ] && echo "  <key>enable_post_quantum</key><true/>" >> "${MDM_FILE}"
+  [ -n "${WARP_DISPLAY_NAME}" ] && echo "  <key>display_name</key><string>${WARP_DISPLAY_NAME}</string>" >> "${MDM_FILE}"
+  [ -n "${WARP_SUPPORT_URL}" ] && echo "  <key>support_url</key><string>${WARP_SUPPORT_URL}</string>" >> "${MDM_FILE}"
+
+  echo "</dict>" >> "${MDM_FILE}"
+
+  echo "[INFO] mdm.xml generated from env vars: ${MDM_FILE}"
+  warp-cli --accept-tos mdm set-config 2>/dev/null || true
+
+else
+  echo "[INFO] No mdm.xml found and no WARP_ORG/WARP_AUTH_CLIENT_ID set"
 fi
 
 # ============================================================
@@ -241,7 +287,7 @@ case "${ROLE}" in
     echo "[INFO] Role: relay (中转) — listen ${GOST_BIND}:${GOST_SOCKS_PORT}/${GOST_HTTP_PORT} → ${GOST_REMOTE:-direct}"
     ;;
   client)
-    LOCAL_BIND="${GOST_LOCAL_BIND:-127.0.0.1}"
+    LOCAL_BIND="${GOST_LOCAL_BIND:-0.0.0.0}"
     LOCAL_SOCKS="${GOST_LOCAL_PORT:-${GOST_SOCKS_PORT}}"
     LOCAL_HTTP="${GOST_LOCAL_HTTP_PORT:-${GOST_HTTP_PORT}}"
     generate_gost_config "${LOCAL_BIND}" "${LOCAL_SOCKS}" "${LOCAL_HTTP}" "" "${GOST_REMOTE}"

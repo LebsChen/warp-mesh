@@ -1,22 +1,45 @@
-# warp-mesh relay (中转节点)
-# 接受 mesh 连入 + 转发到下一跳
+# ============================================================
+# Relay (中转节点) — 接受 mesh 连入 + 转发到下一跳
+#
+# 特点：GOST 对外监听 + 转发，用于国内中转
+# ============================================================
 services:
   warp-mesh:
     image: warp-mesh:latest
     container_name: warp-mesh
     restart: unless-stopped
-    privileged: true
-    network_mode: host
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    volumes:
-      - warp-data:/var/lib/cloudflare-warp
-    environment:
-      - CONNECTOR_TOKEN=${CONNECTOR_TOKEN}
-      - WARP_ROLE=relay
-      - GOST_REMOTE=socks5://${NEXT_HOP:-100.96.0.12:1080}
     cap_add:
       - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+    environment:
+      # --- 角色 ---
+      - WARP_ROLE=relay
 
-volumes:
-  warp-data:
+      # --- WARP Connector Token（必需） ---
+      - CONNECTOR_TOKEN=eyJ...
+
+      # --- GOST 转发目标（必需） ---
+      # 格式：[protocol://]host:port
+      # protocol 默认 socks5，也可用 http://
+      - GOST_REMOTE=socks5://100.96.0.12:1080
+
+      # --- GOST 认证（保护中转节点） ---
+      # - GOST_USER=admin
+      # - GOST_PASS=secret
+
+      # --- WARP 连接 ---
+      # - WARP_MODE=warp
+      # - WARP_PROTOCOL=WireGuard
+
+      # --- GOST 监听 ---
+      # - GOST_BIND=0.0.0.0
+      # - GOST_SOCKS_PORT=1080
+      # - GOST_HTTP_PORT=8080
+
+    volumes:
+      - ./mdm.xml:/var/lib/cloudflare-warp/mdm.xml:ro
+    ports:
+      - "1080:1080"
+      - "8080:8080"

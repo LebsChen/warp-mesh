@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  warp-mesh MDM 配置文件
+
+  将此文件挂载到容器 /var/lib/cloudflare-warp/mdm.xml
+
+  参考：https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/deployment/mdm-deployment/parameters/
+
+  注意：本地设备设置（mdm.xml）优先级高于 Cloudflare Dashboard 上的设置。
+-->
+<dict>
+
+  <!-- ======== 必需参数 ======== -->
+
+  <!-- Zero Trust 组织名（<team-name>.cloudflareaccess.com 中的 team-name） -->
+  <key>organization</key>
+  <string>your-team-name</string>
+
+  <!-- ======== 组织认证（Service Token 自动注册） ======== -->
+
+  <!-- Service Token Client ID（需 Service Auth device enrollment 权限） -->
+  <!-- <key>auth_client_id</key>
+  <string>88bf3b6d86161464f6509f7219099e57.access</string> -->
+
+  <!-- Service Token Client Secret -->
+  <!-- <key>auth_client_secret</key>
+  <string>bdd31cbc4dec990953e39163fbbb194c93313ca9f0a6e420346af9d326b1d2a5</string> -->
+
+  <!-- ======== 连接行为 ======== -->
+
+  <!-- 自动重连（分钟）：0=允许用户关闭，1-1440=自动重连间隔 -->
+  <key>auto_connect</key>
+  <integer>1</integer>
+
+  <!-- 锁定开关：true=用户不能关闭客户端，false=用户可自由开关 -->
+  <!-- <key>switch_locked</key>
+  <false/> -->
+
+  <!-- 跳过首次启动引导页 -->
+  <key>onboarding</key>
+  <false/>
+
+  <!-- ======== 运行模式 ======== -->
+
+  <!--
+    service_mode 可选值：
+    warp        — 流量+DNS 模式（默认）
+    1dot1       — 仅 DNS 模式
+    proxy       — 本地 SOCKS5 代理模式（配合 proxy_port 使用）
+    postureonly — 仅设备状态检测
+    tunnelonly  — 仅隧道模式（不代理 DNS）
+  -->
+  <key>service_mode</key>
+  <string>warp</string>
+
+  <!-- SOCKS5 代理端口（仅 proxy 模式，0-65535） -->
+  <!-- <key>proxy_port</key>
+  <integer>40000</integer> -->
+
+  <!-- ======== 隧道协议 ======== -->
+
+  <!--
+    warp_tunnel_protocol 可选值：
+    masque    — MASQUE 协议（默认，HTTP/3）
+    wireguard — WireGuard 协议（传统）
+  -->
+  <key>warp_tunnel_protocol</key>
+  <string>wireguard</string>
+
+  <!-- ======== 端点覆盖（通常不需要） ======== -->
+
+  <!-- 覆盖 WARP WireGuard 端点（IP:PORT） -->
+  <!-- <key>override_warp_endpoint</key>
+  <string>162.159.197.3:2408</string> -->
+
+  <!-- 覆盖 DoH DNS 解析端点 -->
+  <!-- <key>override_doh_endpoint</key>
+  <string>1.2.3.4</string> -->
+
+  <!-- 覆盖 API 端点 -->
+  <!-- <key>override_api_endpoint</key>
+  <string>1.2.3.4</string> -->
+
+  <!-- ======== 高级参数 ======== -->
+
+  <!--
+    DNS Gateway 唯一 ID（多 DNS Location 时需要指定）
+    用于 DoH-only 模式强制 DNS 查询到特定 Gateway
+  -->
+  <!-- <key>gateway_unique_id</key>
+  <string>your-gateway-unique-id</string> -->
+
+  <!--
+    环境设置：
+    normal      — 标准（默认）
+    fedramp_high — FedRAMP 合规
+  -->
+  <!-- <key>environment</key>
+  <string>normal</string> -->
+
+  <!-- 启用 Post-Quantum 密码学 -->
+  <!-- <key>enable_post_quantum</key>
+  <true/> -->
+
+  <!-- 启用 Path MTU Discovery -->
+  <!-- <key>enable_pmtud</key>
+  <true/> -->
+
+  <!-- 设备显示名（多组织配置时需要） -->
+  <!-- <key>display_name</key>
+  <string>Production</string> -->
+
+  <!-- 反馈 URL -->
+  <!-- <key>support_url</key>
+  <string>https://support.example.com</string> -->
+
+</dict>

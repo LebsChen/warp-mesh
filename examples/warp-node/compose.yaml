@@ -1,26 +1,49 @@
-# warp-mesh node (落地节点)
-# 接受 mesh 连入，出口到外网（或转发到下一跳）
+# ============================================================
+# Node (落地节点) — US VPS / 出口节点
+#
+# 特点：GOST 对外监听，接受 mesh 连入，出口到外网
+# ============================================================
 services:
   warp-mesh:
     image: warp-mesh:latest
     container_name: warp-mesh
     restart: unless-stopped
-    privileged: true
-    network_mode: host
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    volumes:
-      - warp-data:/var/lib/cloudflare-warp
-    environment:
-      - CONNECTOR_TOKEN=${CONNECTOR_TOKEN}
-      - WARP_ROLE=node
-      # 转发到下一跳（可选，如 US VPS 的 mesh IP）
-      # - GOST_REMOTE=socks5://100.96.0.12:1080
-      # 认证（可选）
-      # - GOST_USER=user
-      # - GOST_PASS=pass
     cap_add:
       - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+    environment:
+      # --- 角色 ---
+      - WARP_ROLE=node
 
-volumes:
-  warp-data:
+      # --- WARP Connector Token（必需） ---
+      - CONNECTOR_TOKEN=eyJ...
+
+      # --- MDM 组织配置（也可通过 mdm.xml 文件配置） ---
+      # 以下环境变量会覆盖 mdm.xml 中的同名配置
+
+      # --- WARP 连接 ---
+      # - WARP_AUTO_CONNECT=true
+      # - WARP_SLEEP=5            # warp-svc 启动等待秒数
+      # - WARP_MODE=warp          # warp/doh/warp+doh/dot/warp+dot/proxy/tunnel_only
+      # - WARP_PROTOCOL=WireGuard # WireGuard 或 MASQUE
+      # - WARP_ENDPOINT=162.159.197.3:2408  # 强制端点
+
+      # --- GOST 代理 ---
+      # - GOST_BIND=0.0.0.0
+      # - GOST_SOCKS_PORT=1080
+      # - GOST_HTTP_PORT=8080
+      # - GOST_USER=admin         # 认证用户名
+      # - GOST_PASS=secret        # 认证密码
+      # - GOST_REMOTE=            # node 通常不转发（出口节点）
+
+      # --- 透明代理（node 默认不启用） ---
+      # - WARP_TRANSPARENT=false
+
+    volumes:
+      # MDM 配置文件（可选，覆盖环境变量）
+      - ./mdm.xml:/var/lib/cloudflare-warp/mdm.xml:ro
+    ports:
+      - "1080:1080"  # SOCKS5
+      - "8080:8080"  # HTTP proxy

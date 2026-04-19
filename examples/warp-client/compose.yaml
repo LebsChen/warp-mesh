@@ -1,25 +1,61 @@
-# warp-mesh client (本地客户端)
-# 本地 SOCKS5 + HTTP 代理，转发到 mesh 下一跳
+# ============================================================
+# Client (本地节点) — 本地透明代理 + 转发到落地/中转
+#
+# 特点：GOST 仅本地监听 + 透明代理 + 转发到下一跳
+#       默认启用 iptables 透明代理劫持所有 TCP 流量
+# ============================================================
 services:
   warp-mesh:
     image: warp-mesh:latest
     container_name: warp-mesh
     restart: unless-stopped
-    privileged: true
-    network_mode: host
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    volumes:
-      - warp-data:/var/lib/cloudflare-warp
-    environment:
-      - CONNECTOR_TOKEN=${CONNECTOR_TOKEN}
-      - WARP_ROLE=client
-      - GOST_REMOTE=socks5://${NEXT_HOP:-100.96.0.16:1080}
-      - GOST_LOCAL_BIND=127.0.0.1
-      # ⚠️ 透明代理（会劫持所有 TCP 流量，谨慎启用）
-      # - WARP_TRANSPARENT=true
     cap_add:
       - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      # 允许容器转发流量（透明代理需要）
+      - net.ipv4.ip_forward=1
+    environment:
+      # --- 角色 ---
+      - WARP_ROLE=client
 
-volumes:
-  warp-data:
+      # --- WARP Connector Token（必需） ---
+      - CONNECTOR_TOKEN=eyJ...
+
+      # --- GOST 转发目标（必需） ---
+      # 直连落地节点：socks5://100.96.0.12:1080
+      # 或经过中转：socks5://100.96.0.16:1080
+      - GOST_REMOTE=socks5://100.96.0.12:1080
+
+      # --- 透明代理（client 默认启用） ---
+      # iptables 劫持所有 TCP → GOST redirect port
+      # - WARP_TRANSPARENT=true
+      # - GOST_REDIRECT_PORT=12345
+
+      # --- 本地 GOST 监听 ---
+      # - GOST_LOCAL_BIND=0.0.0.0    # 默认 0.0.0.0，局域网可达
+      # - GOST_LOCAL_PORT=1080       # SOCKS5
+      # - GOST_LOCAL_HTTP_PORT=8080  # HTTP proxy
+
+      # --- WARP 连接 ---
+      # - WARP_MODE=warp
+      # - WARP_PROTOCOL=WireGuard
+      # - WARP_ENDPOINT=162.159.197.3:2408
+
+      # --- MDM 配置（可选，也可通过 volume 挂载 mdm.xml） ---
+      # - WARP_ORG=your-team-name
+      # - WARP_AUTO_CONNECT=1
+      # - WARP_SWITCH_LOCKED=false
+
+    volumes:
+      # MDM 配置文件（推荐挂载，方便修改）
+      - ./mdm.xml:/var/lib/cloudflare-warp/mdm.xml:ro
+
+    # client 通常不需要暴露端口（透明代理 + 本地 SOCKS5）
+    # 如果需要其他容器使用 SOCKS5：
+    # ports:
+    #   - "1080:1080"
+
+    # 使用 host 网络模式（透明代理必须）
+    network_mode: host
