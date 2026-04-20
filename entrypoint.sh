@@ -20,6 +20,8 @@ generate_gost_config() {
 
   local remote_addr=""
   local remote_proto="socks5"
+  local remote_user=""
+  local remote_pass=""
   if [ -n "${remote}" ]; then
     case "$remote" in
       *://*)
@@ -30,6 +32,17 @@ generate_gost_config() {
         remote_addr="${remote}"
         ;;
     esac
+    # 分离认证信息 user:pass@host:port
+    case "$remote_addr" in
+      *@*)
+        local userinfo="${remote_addr%%@*}"
+        remote_user="${userinfo%%:*}"
+        remote_pass="${userinfo#*:}"
+        remote_addr="${remote_addr#*@}"
+        ;;
+    esac
+    # socks5h → socks5 (GOST v3 没有 socks5h connector)
+    [ "${remote_proto}" = "socks5h" ] && remote_proto="socks5"
   fi
 
   mkdir -p "$(dirname "${config}")"
@@ -53,10 +66,6 @@ EOF
 EOF
   fi
 
-  if [ -n "${remote_addr}" ]; then
-    echo "      chain: gost-chain" >> "${config}"
-  fi
-
   cat >> "${config}" << EOF
     listener:
       type: tcp
@@ -75,32 +84,10 @@ EOF
 EOF
   fi
 
-  if [ -n "${remote_addr}" ]; then
-    echo "      chain: gost-chain" >> "${config}"
-  fi
-
   cat >> "${config}" << EOF
     listener:
       type: tcp
 EOF
-
-  # --- chains ---
-  if [ -n "${remote_addr}" ]; then
-    cat >> "${config}" << EOF
-
-chains:
-  - name: gost-chain
-    hops:
-      - name: hop-remote
-        nodes:
-          - name: remote-node
-            addr: ${remote_addr}
-            connector:
-              type: ${remote_proto}
-            dialer:
-              type: tcp
-EOF
-  fi
 
   # --- log ---
   cat >> "${config}" << EOF
@@ -296,7 +283,13 @@ case "${ROLE}" in
 esac
 
 echo "[INFO] Starting GOST with config: ${GOST_CONFIG}"
-gost -C "${GOST_CONFIG}" &
+if [ -n "${GOST_REMOTE}" ]; then
+  # 有上级代理时用命令行 -F 转发（配置文件 chain 模式不工作）
+  echo "[INFO] Forward chain: ${GOST_REMOTE}"
+  gost -C "${GOST_CONFIG}" -F "${GOST_REMOTE}" &
+else
+  gost -C "${GOST_CONFIG}" &
+fi
 GOST_PID=$!
 
 # ============================================================

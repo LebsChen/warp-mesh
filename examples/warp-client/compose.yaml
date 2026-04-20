@@ -24,9 +24,9 @@ services:
       - CONNECTOR_TOKEN=eyJ...
 
       # --- GOST 转发目标（必需） ---
-      # 直连落地节点：socks5://100.96.0.12:1080
-      # 或经过中转：socks5://100.96.0.16:1080
-      - GOST_REMOTE=socks5://100.96.0.12:1080
+      # 直连落地节点：socks5://100.96.0.12:1080 (mesh IP)
+      # 或经过中转：socks5://192.168.1.212:1080 (LAN IP，推荐同 LAN 使用)
+      - GOST_REMOTE=socks5://192.168.1.212:1080
 
       # --- 透明代理（client 默认启用） ---
       # iptables 劫持所有 TCP → GOST redirect port
