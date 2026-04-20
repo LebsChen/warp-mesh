@@ -46,6 +46,8 @@ docker run -d --name warp-mesh --restart unless-stopped \
   --device /dev/net/tun:/dev/net/tun \
   -e CONNECTOR_TOKEN=your_token_here \
   -e WARP_ROLE=node \
+  -v warp-data:/var/lib/cloudflare-warp \
+  -v ./gost:/etc/gost \
   -p 1080:1080 -p 8080:8080 \
   chenlebs/warp-mesh:latest
 ```
@@ -59,6 +61,8 @@ docker run -d --name warp-mesh --restart unless-stopped \
   -e CONNECTOR_TOKEN=your_token_here \
   -e WARP_ROLE=relay \
   -e GOST_REMOTE=socks5://100.96.0.41:1080 \
+  -v warp-data:/var/lib/cloudflare-warp \
+  -v ./gost:/etc/gost \
   -p 1080:1080 -p 8080:8080 \
   chenlebs/warp-mesh:latest
 ```
@@ -73,6 +77,8 @@ docker run -d --name warp-mesh --restart unless-stopped \
   -e CONNECTOR_TOKEN=your_token_here \
   -e WARP_ROLE=client \
   -e GOST_REMOTE=socks5://100.96.0.42:1080 \
+  -v warp-data:/var/lib/cloudflare-warp \
+  -v ./gost:/etc/gost \
   chenlebs/warp-mesh:latest
 ```
 
