@@ -23,6 +23,7 @@ fi
 BIND="${GOST_BIND:-0.0.0.0}"
 SOCKS_PORT="${GOST_SOCKS_PORT:-1080}"
 HTTP_PORT="${GOST_HTTP_PORT:-8080}"
+REDIRECT_PORT="${GOST_REDIRECT_PORT:-12345}"
 
 # 解析 GOST_REMOTE
 REMOTE_ADDR=""
@@ -101,6 +102,36 @@ cat >> "${GOST_FILE}" << EOF
       type: tcp
 EOF
 
+# Client 角色：加透明代理 redirect handler
+if [ "${ROLE}" = "client" ]; then
+  cat >> "${GOST_FILE}" << REDEOF
+
+  - name: redirect-service
+    addr: ":${REDIRECT_PORT}"
+    handler:
+      type: red
+      chain: gost-chain
+      metadata:
+        sniffing: true
+    listener:
+      type: red
+REDEOF
+fi
+
+  - name: redirect-service
+    addr: ":${REDIRECT_PORT}"
+    handler:
+      type: auto
+EOF
+  if [ -n "${REMOTE_ADDR}" ]; then
+    echo "      chain: gost-chain" >> "${GOST_FILE}"
+  fi
+  cat >> "${GOST_FILE}" << EOF
+    listener:
+      type: tcp
+EOF
+fi
+
 if [ -n "${REMOTE_ADDR}" ]; then
   cat >> "${GOST_FILE}" << EOF
 
@@ -137,5 +168,6 @@ EOF
 
 echo "[OK] Generated ${GOST_FILE} for role: ${ROLE}"
 [ -n "${GOST_REMOTE}" ] && echo "     Remote: ${GOST_REMOTE}"
+[ "${ROLE}" = "client" ] && echo "     Transparent proxy: redirect :${REDIRECT_PORT} (iptables)"
 echo ""
 echo "Next: docker compose up -d"
