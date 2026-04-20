@@ -20,10 +20,12 @@ services:
       # --- WARP Connector Token（必需） ---
       - CONNECTOR_TOKEN=eyJ...
 
-      # --- GOST 转发目标（必需） ---
-      # 格式：[protocol://]host:port
-      # protocol 默认 socks5，也可用 http://
-      - GOST_REMOTE=socks5://100.96.0.12:1080
+      # --- GOST 配置 ---
+      - GOST_CONFIG=/etc/gost/gost.yaml
+
+      # --- GOST 转发目标（gost.yaml 不存在时自动生成用） ---
+      # 格式：[protocol://][user:pass@]host:port
+      # - GOST_REMOTE=socks5://100.96.0.12:1080
 
       # --- GOST 认证（保护中转节点） ---
       # - GOST_USER=admin
@@ -33,14 +35,11 @@ services:
       # - WARP_MODE=warp
       # - WARP_PROTOCOL=WireGuard
 
-      # --- GOST 监听 ---
-      # - GOST_BIND=0.0.0.0
-      # - GOST_SOCKS_PORT=1080
-      # - GOST_HTTP_PORT=8080
-
     volumes:
       # WARP 数据持久化
       - warp-data:/var/lib/cloudflare-warp
+      # GOST 配置文件
+      - ./gost:/etc/gost
     ports:
       - "1080:1080"
       - "8080:8080"

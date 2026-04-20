@@ -20,31 +20,27 @@ services:
       # --- WARP Connector Token（必需） ---
       - CONNECTOR_TOKEN=eyJ...
 
+      # --- GOST 配置 ---
+      - GOST_CONFIG=/etc/gost/gost.yaml
+
       # --- MDM 组织配置（也可通过 mdm.xml 文件配置） ---
-      # 以下环境变量会覆盖 mdm.xml 中的同名配置
-
-      # --- WARP 连接 ---
-      # - WARP_AUTO_CONNECT=true
-      # - WARP_SLEEP=5            # warp-svc 启动等待秒数
-      # - WARP_MODE=warp          # warp/doh/warp+doh/dot/warp+dot/proxy/tunnel_only
-      # - WARP_PROTOCOL=WireGuard # WireGuard 或 MASQUE
-      # - WARP_ENDPOINT=162.159.197.3:2408  # 强制端点
-
-      # --- GOST 代理 ---
       # - GOST_BIND=0.0.0.0
       # - GOST_SOCKS_PORT=1080
       # - GOST_HTTP_PORT=8080
       # - GOST_USER=admin         # 认证用户名
       # - GOST_PASS=secret        # 认证密码
-      # - GOST_REMOTE=            # node 通常不转发（出口节点）
 
-      # --- 透明代理（node 默认不启用） ---
-      # - WARP_TRANSPARENT=false
+      # --- WARP 连接 ---
+      # - WARP_AUTO_CONNECT=true
+      # - WARP_SLEEP=5
+      # - WARP_MODE=warp
+      # - WARP_PROTOCOL=WireGuard
 
     volumes:
-      # WARP 数据持久化（保持 mesh IP 稳定，避免重新注册）
+      # WARP 数据持久化（保持 mesh IP 稳定）
       - warp-data:/var/lib/cloudflare-warp
-      # MDM 配置文件（可选，覆盖环境变量）
+      # GOST 配置文件（不存在时自动生成，存在则使用宿主机版本）
+      - ./gost:/etc/gost
     ports:
       - "1080:1080"  # SOCKS5
       - "8080:8080"  # HTTP proxy

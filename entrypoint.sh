@@ -295,29 +295,40 @@ GOST_BIND="${GOST_BIND:-0.0.0.0}"
 GOST_SOCKS_PORT="${GOST_SOCKS_PORT:-1080}"
 GOST_HTTP_PORT="${GOST_HTTP_PORT:-8080}"
 
-AUTH=""
-if [ -n "${GOST_USER}" ] && [ -n "${GOST_PASS}" ]; then
-  AUTH="${GOST_USER}:${GOST_PASS}@"
-  echo "[INFO] GOST auth enabled"
+# Docker bind mount 在宿主机文件不存在时会创建目录，需要处理
+if [ -d "${GOST_CONFIG}" ]; then
+  echo "[WARN] ${GOST_CONFIG} is a directory (Docker created it for missing bind mount)"
+  rmdir "${GOST_CONFIG}" 2>/dev/null || true
 fi
 
-case "${ROLE}" in
-  node)
-    generate_gost_config "${GOST_BIND}" "${GOST_SOCKS_PORT}" "${GOST_HTTP_PORT}" "${AUTH}" "${GOST_REMOTE}"
-    echo "[INFO] Role: node (落地) — listen ${GOST_BIND}:${GOST_SOCKS_PORT}/${GOST_HTTP_PORT}"
-    ;;
-  relay)
-    generate_gost_config "${GOST_BIND}" "${GOST_SOCKS_PORT}" "${GOST_HTTP_PORT}" "${AUTH}" "${GOST_REMOTE}"
-    echo "[INFO] Role: relay (中转) — listen ${GOST_BIND}:${GOST_SOCKS_PORT}/${GOST_HTTP_PORT} → ${GOST_REMOTE:-direct}"
-    ;;
-  client)
-    LOCAL_BIND="${GOST_LOCAL_BIND:-0.0.0.0}"
-    LOCAL_SOCKS="${GOST_LOCAL_PORT:-${GOST_SOCKS_PORT}}"
-    LOCAL_HTTP="${GOST_LOCAL_HTTP_PORT:-${GOST_HTTP_PORT}}"
-    generate_gost_config "${LOCAL_BIND}" "${LOCAL_SOCKS}" "${LOCAL_HTTP}" "" "${GOST_REMOTE}"
-    echo "[INFO] Role: client (本地) — listen ${LOCAL_BIND}:${LOCAL_SOCKS}/${LOCAL_HTTP} → ${GOST_REMOTE:-direct}"
-    ;;
-esac
+if [ -f "${GOST_CONFIG}" ]; then
+  echo "[INFO] Using existing GOST config: ${GOST_CONFIG} (mounted from host)"
+else
+  echo "[INFO] Generating GOST config: ${GOST_CONFIG}"
+  AUTH=""
+  if [ -n "${GOST_USER}" ] && [ -n "${GOST_PASS}" ]; then
+    AUTH="${GOST_USER}:${GOST_PASS}@"
+    echo "[INFO] GOST auth enabled"
+  fi
+
+  case "${ROLE}" in
+    node)
+      generate_gost_config "${GOST_BIND}" "${GOST_SOCKS_PORT}" "${GOST_HTTP_PORT}" "${AUTH}" "${GOST_REMOTE}"
+      echo "[INFO] Role: node (落地) — listen ${GOST_BIND}:${GOST_SOCKS_PORT}/${GOST_HTTP_PORT}"
+      ;;
+    relay)
+      generate_gost_config "${GOST_BIND}" "${GOST_SOCKS_PORT}" "${GOST_HTTP_PORT}" "${AUTH}" "${GOST_REMOTE}"
+      echo "[INFO] Role: relay (中转) — listen ${GOST_BIND}:${GOST_SOCKS_PORT}/${GOST_HTTP_PORT} → ${GOST_REMOTE:-direct}"
+      ;;
+    client)
+      LOCAL_BIND="${GOST_LOCAL_BIND:-0.0.0.0}"
+      LOCAL_SOCKS="${GOST_LOCAL_PORT:-${GOST_SOCKS_PORT}}"
+      LOCAL_HTTP="${GOST_LOCAL_HTTP_PORT:-${GOST_HTTP_PORT}}"
+      generate_gost_config "${LOCAL_BIND}" "${LOCAL_SOCKS}" "${LOCAL_HTTP}" "" "${GOST_REMOTE}"
+      echo "[INFO] Role: client (本地) — listen ${LOCAL_BIND}:${LOCAL_SOCKS}/${LOCAL_HTTP} → ${GOST_REMOTE:-direct}"
+      ;;
+  esac
+fi
 
 echo "[INFO] Starting GOST with config: ${GOST_CONFIG}"
 gost -C "${GOST_CONFIG}" &
