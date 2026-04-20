@@ -30,48 +30,77 @@ GOST_REMOTE →                100.96.0.12:1080
 
 ## 快速开始
 
-### 1. 构建
+### Docker Pull
 
 ```bash
-docker build -t warp-mesh:latest .
+docker pull chenlebs/warp-mesh:latest
 ```
 
-### 2. 部署 node (US VPS)
+### Docker Run
+
+**Node（落地节点，公网出口）：**
 
 ```bash
-cd examples/warp-node
-# 编辑 compose.yaml，填入 CONNECTOR_TOKEN
+docker run -d --name warp-mesh --restart unless-stopped \
+  --cap-add NET_ADMIN --cap-add SYS_MODULE \
+  --device /dev/net/tun:/dev/net/tun \
+  -e CONNECTOR_TOKEN=your_token_here \
+  -e WARP_ROLE=node \
+  -p 1080:1080 -p 8080:8080 \
+  chenlebs/warp-mesh:latest
+```
+
+**Relay（中转节点，转发到下一跳）：**
+
+```bash
+docker run -d --name warp-mesh --restart unless-stopped \
+  --cap-add NET_ADMIN --cap-add SYS_MODULE \
+  --device /dev/net/tun:/dev/net/tun \
+  -e CONNECTOR_TOKEN=your_token_here \
+  -e WARP_ROLE=relay \
+  -e GOST_REMOTE=socks5://100.96.0.41:1080 \
+  -p 1080:1080 -p 8080:8080 \
+  chenlebs/warp-mesh:latest
+```
+
+**Client（本地透明代理，host 网络）：**
+
+```bash
+docker run -d --name warp-mesh --restart unless-stopped \
+  --cap-add NET_ADMIN --cap-add SYS_MODULE \
+  --device /dev/net/tun:/dev/net/tun \
+  --network host \
+  -e CONNECTOR_TOKEN=your_token_here \
+  -e WARP_ROLE=client \
+  -e GOST_REMOTE=socks5://100.96.0.42:1080 \
+  chenlebs/warp-mesh:latest
+```
+
+> 首次启动后查看 mesh IP：`docker logs warp-mesh 2>&1 | grep "v4"`
+> 然后填入下游节点的 `GOST_REMOTE`，重启即可。
+
+### Docker Compose
+
+使用 `init.sh` 生成配置，再用 compose 部署（推荐，支持配置持久化）：
+
+```bash
+# 生成 gost.yaml 配置
+bash init.sh node                  # 或 relay/client + GOST_REMOTE
+
+# 启动
 docker compose up -d
 ```
 
-### 3. 部署 relay (国内中转)
+各角色示例 compose 文件见 `examples/` 目录。
+
+### 停止
 
 ```bash
-cd examples/warp-relay
-# 编辑 compose.yaml，填入 CONNECTOR_TOKEN 和 GOST_REMOTE（node 的 mesh IP）
-docker compose up -d
-```
-
-### 4. 部署 client (本地)
-
-```bash
-cd examples/warp-client
-# 编辑 compose.yaml，填入 CONNECTOR_TOKEN 和 GOST_REMOTE
-docker compose up -d
-
-# 测试
-curl -4 -s --proxy socks5://<client-ip>:1080 ifconfig.me
-# 应返回 node 的出口 IP
-```
-
-### 5. 停止
-
-```bash
-docker compose down
+docker stop warp-mesh && docker rm warp-mesh
 # 自动：断开 WARP → 停止 GOST → 清理 iptables → 停止 warp-svc
 ```
 
-## 环境变量
+
 
 ### 必需
 
