@@ -31,12 +31,11 @@ RUN GOST_VERSION=$(curl -s https://api.github.com/repos/go-gost/gost/releases/la
 
 # 复制文件
 COPY entrypoint.sh /entrypoint.sh
+COPY gost-config/ /etc/gost/defaults/
 RUN chmod +x /entrypoint.sh
 
 # 创建必要目录
 RUN mkdir -p /var/lib/cloudflare-warp /run/dbus /etc/gost
-
-RUN mkdir -p /dev/net && mknod /dev/net/tun c 10 200 && chmod 600 /dev/net/tun
 
 EXPOSE 1080 8080
 
