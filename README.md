@@ -198,7 +198,9 @@ warp-mesh/
 
 ## 注意事项
 
-- **Mesh IP**：WARP Connector 的 mesh IP（100.64.x.x）由 Cloudflare 自动分配，正常 reconnect 不变，删除重建会变
+- **Mesh IP 稳定性**：WARP Connector mesh IP（100.96.x.x）由 Cloudflare 自动分配。docker compose restart 和 warp-cli disconnect/connect IP 不变。只有删除 volume 后重建（新注册）才会变。示例 compose 已配置 warp-data volume 持久化 /var/lib/cloudflare-warp
+- **首次部署**：首次 docker compose up 后查看日志获取 mesh IP：docker logs warp-mesh 2>&1 | grep v4，然后填入下游节点的 GOST_REMOTE
+- **GOST_REMOTE 格式**：支持 [protocol://][user:pass@]host:port，如 socks5://001:password@100.96.0.42:1080。纯数字用户名会被 YAML 误解析为八进制，已自动加引号处理
 - **client 用 `network_mode: host`**：透明代理和局域网可达都需要 host 网络
 - **GOST 配置格式**：chain 中 hop 下必须用 `nodes` 数组 + `connector`/`dialer`（不是 `handler`/`listener`）
 - **旧进程残留**：`network_mode: host` 下容器异常退出可能残留 GOST 进程，需 `kill $(pidof gost)`
