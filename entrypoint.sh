@@ -20,6 +20,8 @@ generate_gost_config() {
 
   local remote_addr=""
   local remote_proto="socks5"
+  local remote_user=""
+  local remote_pass=""
   if [ -n "${remote}" ]; then
     case "$remote" in
       *://*)
@@ -30,6 +32,17 @@ generate_gost_config() {
         remote_addr="${remote}"
         ;;
     esac
+    # 分离认证信息 user:pass@host:port
+    case "$remote_addr" in
+      *@*)
+        local userinfo="${remote_addr%%@*}"
+        remote_user="${userinfo%%:*}"
+        remote_pass="${userinfo#*:}"
+        remote_addr="${remote_addr#*@}"
+        ;;
+    esac
+    # socks5h → socks5 (GOST v3 不支持 socks5h connector)
+    [ "${remote_proto}" = "socks5h" ] && remote_proto="socks5"
   fi
 
   mkdir -p "$(dirname "${config}")"
@@ -48,8 +61,8 @@ EOF
     local pass="${auth#*:}"
     cat >> "${config}" << EOF
       auth:
-        username: ${user}
-        password: ${pass}
+        username: "${user}"
+        password: "${pass}"
 EOF
   fi
 
@@ -70,8 +83,8 @@ EOF
   if [ -n "${auth}" ]; then
     cat >> "${config}" << EOF
       auth:
-        username: ${user}
-        password: ${pass}
+        username: "${user}"
+        password: "${pass}"
 EOF
   fi
 
@@ -97,6 +110,17 @@ chains:
             addr: ${remote_addr}
             connector:
               type: ${remote_proto}
+EOF
+
+    if [ -n "${remote_user}" ]; then
+      cat >> "${config}" << EOF
+              auth:
+                username: "${remote_user}"
+                password: "${remote_pass}"
+EOF
+    fi
+
+    cat >> "${config}" << EOF
             dialer:
               type: tcp
 EOF

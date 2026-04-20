@@ -42,8 +42,12 @@ services:
       # - WARP_TRANSPARENT=false
 
     volumes:
+      # WARP 数据持久化（保持 mesh IP 稳定，避免重新注册）
+      - warp-data:/var/lib/cloudflare-warp
       # MDM 配置文件（可选，覆盖环境变量）
-      - ./mdm.xml:/var/lib/cloudflare-warp/mdm.xml:ro
     ports:
       - "1080:1080"  # SOCKS5
       - "8080:8080"  # HTTP proxy
+
+volumes:
+  warp-data:

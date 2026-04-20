@@ -39,7 +39,11 @@ services:
       # - GOST_HTTP_PORT=8080
 
     volumes:
-      - ./mdm.xml:/var/lib/cloudflare-warp/mdm.xml:ro
+      # WARP 数据持久化
+      - warp-data:/var/lib/cloudflare-warp
     ports:
       - "1080:1080"
       - "8080:8080"
+
+volumes:
+  warp-data:

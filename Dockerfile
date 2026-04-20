@@ -31,7 +31,6 @@ RUN GOST_VERSION=$(curl -s https://api.github.com/repos/go-gost/gost/releases/la
 
 # 复制文件
 COPY entrypoint.sh /entrypoint.sh
-COPY gost-config/ /etc/gost/defaults/
 RUN chmod +x /entrypoint.sh
 
 # 创建必要目录

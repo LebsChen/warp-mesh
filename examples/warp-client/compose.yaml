@@ -49,8 +49,9 @@ services:
       # - WARP_SWITCH_LOCKED=false
 
     volumes:
+      # WARP 数据持久化
+      - warp-data:/var/lib/cloudflare-warp
       # MDM 配置文件（推荐挂载，方便修改）
-      - ./mdm.xml:/var/lib/cloudflare-warp/mdm.xml:ro
 
     # client 通常不需要暴露端口（透明代理 + 本地 SOCKS5）
     # 如果需要其他容器使用 SOCKS5：
@@ -59,3 +60,6 @@ services:
 
     # 使用 host 网络模式（透明代理必须）
     network_mode: host
+
+volumes:
+  warp-data:
